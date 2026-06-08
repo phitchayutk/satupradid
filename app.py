@@ -238,10 +238,11 @@ with tab1:
         st.markdown('<div class="section-hdr green">📅  วันที่มีคนขาดมากที่สุด (Top 10)</div>', unsafe_allow_html=True)
         if len(miss_df):
             date_miss = (miss_df.groupby('วันที่ขาด')
-                         .agg(จำนวนคนขาด=('ชื่อผู้ปฏิบัติ', 'nunique'),
-                              ตัวอย่างรายชื่อ=('ชื่อผู้ปฏิบัติ',
+                         .agg(count=('ชื่อผู้ปฏิบัติ', 'nunique'),
+                              names=('ชื่อผู้ปฏิบัติ',
                                 lambda x: ', '.join(list(x.unique())[:3]) +
                                 ('...' if x.nunique() > 3 else '')))
+                         .rename(columns={'count': 'จำนวนคนขาด', 'names': 'ตัวอย่างรายชื่อ'}))
                          .reset_index()
                          .sort_values('จำนวนคนขาด', ascending=False)
                          .head(10))
