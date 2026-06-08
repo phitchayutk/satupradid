@@ -5,8 +5,8 @@ import io
 
 # ── Page config ────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="ระบบตรวจสอบวิถีสา",
-    page_icon="🏥",
+    page_title="ระบบตรวจสอบบันทึกวิทิสาแบบรายบุคคล",
+    page_icon="🙏",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -265,10 +265,10 @@ def kpi_card(label, value, unit, cls):
 # ── App Header ─────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="app-header">
-    <div style="font-size:2.5rem">🏥</div>
+    <div style="font-size:2.5rem">🙏</div>
     <div>
         <h1>ระบบตรวจสอบการปฏิบัติวิถีสา</h1>
-        <p>Upload ไฟล์ Google Form → ดูรายงานการขาดรอบทันที ไม่ต้องตั้งค่าอะไรเพิ่ม</p>
+        <p>Upload ไฟล์ Google Form → ดูรายงานการขาดรอบทันที </p>
     </div>
 </div>
 """, unsafe_allow_html=True)
