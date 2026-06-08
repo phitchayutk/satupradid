@@ -427,7 +427,7 @@ with tab2:
     if len(filtered_show):
         styled = (filtered_show.set_index('#')
             .style
-            .applymap(color_miss_count, subset=['จำนวนรอบขาด'])
+            .map(color_miss_count, subset=['จำนวนรอบขาด'])
         )
         st.dataframe(styled, use_container_width=True, height=420)
         st.caption(f"แสดง {len(filtered_show)} รายการ")
@@ -466,7 +466,7 @@ with tab2:
 
     styled2 = (sum_show.set_index('#')
         .style
-        .applymap(color_rate, subset=['อัตราขาด'])
+        .map(color_rate, subset=['อัตราขาด'])
         .format({'อัตราขาด': '{:.1%}'})
     )
     st.dataframe(styled2, use_container_width=True, height=480)
@@ -519,7 +519,7 @@ with tab3:
             p_miss_show = p_miss_show[['#','วันที่ขาด','รอบที่ขาด','จำนวนรอบขาด']]
             styled3 = (p_miss_show.set_index('#')
                 .style
-                .applymap(color_miss_count, subset=['จำนวนรอบขาด'])
+                .map(color_miss_count, subset=['จำนวนรอบขาด'])
             )
             st.dataframe(styled3, use_container_width=True, height=min(420, 40 + 35*len(p_miss_show)))
 
