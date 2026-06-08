@@ -5,7 +5,7 @@ import io
 
 # ── Page config ────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="ระบบตรวจสอบวิถีสา",
+    page_title="ระบบตรวจสอบวิทิสารายบุคคล",
     page_icon="🙏",
     layout="wide",
     initial_sidebar_state="collapsed",
