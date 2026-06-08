@@ -242,7 +242,7 @@ with tab1:
                               names=('ชื่อผู้ปฏิบัติ',
                                 lambda x: ', '.join(list(x.unique())[:3]) +
                                 ('...' if x.nunique() > 3 else '')))
-                         .rename(columns={'count': 'จำนวนคนขาด', 'names': 'ตัวอย่างรายชื่อ'}))
+                         .rename(columns={'count': 'จำนวนคนขาด', 'names': 'ตัวอย่างรายชื่อ'})
                          .reset_index()
                          .sort_values('จำนวนคนขาด', ascending=False)
                          .head(10))
