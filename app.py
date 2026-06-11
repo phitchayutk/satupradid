@@ -5,7 +5,7 @@ import io
 
 # ── Page config ────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="ระบบตรวจสอบวิทิสารายบุคคล",
+    page_title="ระบบตรวจสอบวิถีสา",
     page_icon="🙏",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -152,7 +152,47 @@ def process_file(file_bytes: bytes):
 
     summary_df = pd.DataFrame(summary_rows)
 
-    return raw, miss_df, summary_df, all_persons, date_min, date_max, total_days
+    # ── Streak: ช่วงทำสมาธิต่อเนื่อง per person ──────────────────────────
+    streak_rows = []
+    for person in all_persons:
+        done_dates = sorted(person_dates[person_dates['name'] == person]['date'])
+        if not done_dates:
+            continue
+        streak_start = done_dates[0]
+        prev = done_dates[0]
+        for d in done_dates[1:]:
+            if (d - prev).days == 1:
+                prev = d
+            else:
+                streak_rows.append({
+                    'ชื่อผู้ปฏิบัติ': person,
+                    'เริ่ม':           streak_start,
+                    'สิ้นสุด':         prev,
+                    'จำนวนวัน':        (prev - streak_start).days + 1,
+                })
+                streak_start = d
+                prev = d
+        streak_rows.append({
+            'ชื่อผู้ปฏิบัติ': person,
+            'เริ่ม':           streak_start,
+            'สิ้นสุด':         prev,
+            'จำนวนวัน':        (prev - streak_start).days + 1,
+        })
+
+    streak_df = (pd.DataFrame(streak_rows)
+                 .sort_values(['ชื่อผู้ปฏิบัติ', 'เริ่ม'])
+                 .reset_index(drop=True)
+                 if streak_rows
+                 else pd.DataFrame(columns=['ชื่อผู้ปฏิบัติ','เริ่ม','สิ้นสุด','จำนวนวัน']))
+
+    if len(streak_df):
+        best_streak = streak_df.groupby('ชื่อผู้ปฏิบัติ')['จำนวนวัน'].max().to_dict()
+        summary_df['ต่อเนื่องสูงสุด (วัน)'] = summary_df['ชื่อผู้ปฏิบัติ'].map(
+            lambda p: best_streak.get(p, 0))
+    else:
+        summary_df['ต่อเนื่องสูงสุด (วัน)'] = 0
+
+    return raw, miss_df, summary_df, streak_df, all_persons, date_min, date_max, total_days
 
 def color_rate(val):
     if isinstance(val, float):
@@ -190,7 +230,7 @@ if uploaded is None:
 # ── Process ────────────────────────────────────────────────────────────────
 with st.spinner("⏳  กำลังประมวลผล..."):
     try:
-        raw, miss_df, summary_df, all_persons, date_min, date_max, total_days = process_file(uploaded.read())
+        raw, miss_df, summary_df, streak_df, all_persons, date_min, date_max, total_days = process_file(uploaded.read())
     except Exception as e:
         st.error(f"❌  ไม่สามารถอ่านไฟล์ได้: {e}")
         st.stop()
@@ -309,7 +349,7 @@ with tab2:
         sum_show = sum_show[sum_show['ชื่อผู้ปฏิบัติ'].isin(sel_person)]
     sum_show.insert(0, '#', range(1, len(sum_show)+1))
     sum_show = sum_show[['#','ชื่อผู้ปฏิบัติ','วันทั้งหมด','วันที่ทำสมาธิ',
-                          'วันที่ขาด','อัตราขาด','วันที่ขาด (ทั้งหมด)']]
+                          'วันที่ขาด','อัตราขาด','ต่อเนื่องสูงสุด (วัน)','วันที่ขาด (ทั้งหมด)']]
 
     styled = (sum_show.set_index('#')
               .style
@@ -331,25 +371,51 @@ with tab2:
 with tab3:
     sel = st.selectbox("🔍  เลือกผู้ปฏิบัติ", all_persons)
     if sel:
-        p_sum  = summary_df[summary_df['ชื่อผู้ปฏิบัติ'] == sel].iloc[0]
-        p_miss = miss_df[miss_df['ชื่อผู้ปฏิบัติ'] == sel].copy()
+        p_sum    = summary_df[summary_df['ชื่อผู้ปฏิบัติ'] == sel].iloc[0]
+        p_miss   = miss_df[miss_df['ชื่อผู้ปฏิบัติ'] == sel].copy()
+        p_streak = streak_df[streak_df['ชื่อผู้ปฏิบัติ'] == sel].copy()
 
         td      = int(p_sum['วันทั้งหมด'])
         ok      = int(p_sum['วันที่ทำสมาธิ'])
         md      = int(p_sum['วันที่ขาด'])
         pct     = float(p_sum['อัตราขาด'])
+        best_s  = int(p_sum['ต่อเนื่องสูงสุด (วัน)'])
         pct_str = f"{pct:.1%}"
         pct_cls = "red" if pct >= 0.3 else ("orange" if pct > 0 else "navy")
 
         st.markdown(f"""
-        <div class="kpi-grid">
-            {kpi_card("วันในช่วงทั้งหมด", td,       "วัน", "navy")}
-            {kpi_card("วันที่ทำสมาธิ",    ok,       "วัน", "blue")}
-            {kpi_card("วันที่ขาด",        md,       "วัน", "red")}
-            {kpi_card("อัตราขาด",         pct_str,  "",    pct_cls)}
+        <div class="kpi-grid" style="grid-template-columns:repeat(5,1fr)">
+            {kpi_card("วันในช่วงทั้งหมด", td,      "วัน",             "navy")}
+            {kpi_card("วันที่ทำสมาธิ",    ok,      "วัน",             "blue")}
+            {kpi_card("วันที่ขาด",        md,      "วัน",             "red")}
+            {kpi_card("อัตราขาด",         pct_str, "",                pct_cls)}
+            {kpi_card("Streak สูงสุด",    best_s,  "วันติดต่อกัน",    "orange")}
         </div>
         """, unsafe_allow_html=True)
 
+        # ── ตารางช่วงต่อเนื่อง ──────────────────────────────────────────
+        st.markdown('<div class="section-hdr blue">🔥  ช่วงที่ทำสมาธิต่อเนื่อง (เรียงจากยาวสุด)</div>', unsafe_allow_html=True)
+
+        if len(p_streak):
+            def color_streak(val):
+                if isinstance(val, (int, float)) and val == best_s and best_s > 1:
+                    return 'background-color:#D6EAF8; color:#1A5276; font-weight:700'
+                return ''
+
+            s_show = p_streak.copy()
+            s_show['เริ่ม']   = s_show['เริ่ม'].apply(lambda d: d.strftime('%d/%m/%Y'))
+            s_show['สิ้นสุด'] = s_show['สิ้นสุด'].apply(lambda d: d.strftime('%d/%m/%Y'))
+            s_show = (s_show[['เริ่ม','สิ้นสุด','จำนวนวัน']]
+                      .sort_values('จำนวนวัน', ascending=False)
+                      .reset_index(drop=True))
+            s_show.insert(0, '#', range(1, len(s_show)+1))
+            styled_s = s_show.set_index('#').style.map(color_streak, subset=['จำนวนวัน'])
+            st.dataframe(styled_s, use_container_width=True,
+                         height=min(420, 40 + 35*len(s_show)))
+        else:
+            st.info("ไม่มีข้อมูล streak")
+
+        # ── วันที่ขาด ───────────────────────────────────────────────────
         if md == 0:
             st.markdown(f"""
             <div class="info-banner">
@@ -358,7 +424,6 @@ with tab3:
             """, unsafe_allow_html=True)
         else:
             st.markdown(f'<div class="section-hdr red">❌  วันที่ไม่ได้ทำสมาธิ ({md} วัน)</div>', unsafe_allow_html=True)
-
             p_show = p_miss.copy()
             p_show['วัน'] = p_show['วันที่ขาด'].apply(
                 lambda d: ['จันทร์','อังคาร','พุธ','พฤหัส','ศุกร์','เสาร์','อาทิตย์'][d.weekday()])
@@ -366,7 +431,7 @@ with tab3:
             p_show.insert(0, '#', range(1, len(p_show)+1))
             p_show = p_show[['#', 'วันที่ขาด', 'วัน']]
             st.dataframe(p_show.set_index('#'), use_container_width=True,
-                         height=min(500, 40 + 35 * len(p_show)))
+                         height=min(400, 40 + 35*len(p_show)))
 
 # ── Footer ─────────────────────────────────────────────────────────────────
 st.markdown("---")
