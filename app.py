@@ -152,47 +152,72 @@ def process_file(file_bytes: bytes):
 
     summary_df = pd.DataFrame(summary_rows)
 
-    # ── Streak: ช่วงทำสมาธิต่อเนื่อง per person ──────────────────────────
-    streak_rows = []
-    for person in all_persons:
-        done_dates = sorted(person_dates[person_dates['name'] == person]['date'])
-        if not done_dates:
-            continue
-        streak_start = done_dates[0]
-        prev = done_dates[0]
-        for d in done_dates[1:]:
+    # ── Streak แบบ 1: มีบันทึกวันนั้น (ไม่สนใจกี่รอบ) ─────────────────
+    def calc_streaks(date_list, label):
+        rows = []
+        if not date_list:
+            return rows
+        start = date_list[0]
+        prev  = date_list[0]
+        for d in date_list[1:]:
             if (d - prev).days == 1:
                 prev = d
             else:
-                streak_rows.append({
-                    'ชื่อผู้ปฏิบัติ': person,
-                    'เริ่ม':           streak_start,
-                    'สิ้นสุด':         prev,
-                    'จำนวนวัน':        (prev - streak_start).days + 1,
-                })
-                streak_start = d
-                prev = d
-        streak_rows.append({
-            'ชื่อผู้ปฏิบัติ': person,
-            'เริ่ม':           streak_start,
-            'สิ้นสุด':         prev,
-            'จำนวนวัน':        (prev - streak_start).days + 1,
-        })
+                rows.append({'เริ่ม': start, 'สิ้นสุด': prev,
+                             'จำนวนวัน': (prev - start).days + 1, 'ประเภท': label})
+                start = d; prev = d
+        rows.append({'เริ่ม': start, 'สิ้นสุด': prev,
+                     'จำนวนวัน': (prev - start).days + 1, 'ประเภท': label})
+        return rows
 
-    streak_df = (pd.DataFrame(streak_rows)
-                 .sort_values(['ชื่อผู้ปฏิบัติ', 'เริ่ม'])
-                 .reset_index(drop=True)
+    # วันที่ทำครบ 3 รอบ (เช้า กลางวัน เย็น)
+    raw[col_round] = raw[col_round].astype(str).str.strip()
+    full_day_rows = []
+    for _, row in raw.iterrows():
+        r = str(row[col_round])
+        if 'เช้า' in r and 'กลางวัน' in r and 'เย็น' in r:
+            full_day_rows.append({'name': row[col_name], 'date': row[col_date].date()})
+    full_days = pd.DataFrame(full_day_rows).drop_duplicates() if full_day_rows else pd.DataFrame(columns=['name','date'])
+
+    streak_rows      = []
+    full_streak_rows = []
+
+    for person in all_persons:
+        # streak ทั่วไป (มีบันทึก)
+        done = sorted(person_dates[person_dates['name'] == person]['date'])
+        for r in calc_streaks(done, 'any'):
+            r['ชื่อผู้ปฏิบัติ'] = person
+            streak_rows.append(r)
+
+        # streak ครบ 3 รอบ
+        full = sorted(full_days[full_days['name'] == person]['date'].unique())
+        for r in calc_streaks(full, 'full'):
+            r['ชื่อผู้ปฏิบัติ'] = person
+            full_streak_rows.append(r)
+
+    streak_df = (pd.DataFrame(streak_rows)[['ชื่อผู้ปฏิบัติ','เริ่ม','สิ้นสุด','จำนวนวัน']]
+                 .sort_values(['ชื่อผู้ปฏิบัติ','เริ่ม']).reset_index(drop=True)
                  if streak_rows
                  else pd.DataFrame(columns=['ชื่อผู้ปฏิบัติ','เริ่ม','สิ้นสุด','จำนวนวัน']))
 
+    full_streak_df = (pd.DataFrame(full_streak_rows)[['ชื่อผู้ปฏิบัติ','เริ่ม','สิ้นสุด','จำนวนวัน']]
+                      .sort_values(['ชื่อผู้ปฏิบัติ','เริ่ม']).reset_index(drop=True)
+                      if full_streak_rows
+                      else pd.DataFrame(columns=['ชื่อผู้ปฏิบัติ','เริ่ม','สิ้นสุด','จำนวนวัน']))
+
     if len(streak_df):
         best_streak = streak_df.groupby('ชื่อผู้ปฏิบัติ')['จำนวนวัน'].max().to_dict()
-        summary_df['ต่อเนื่องสูงสุด (วัน)'] = summary_df['ชื่อผู้ปฏิบัติ'].map(
-            lambda p: best_streak.get(p, 0))
+        summary_df['ต่อเนื่องสูงสุด (วัน)'] = summary_df['ชื่อผู้ปฏิบัติ'].map(lambda p: best_streak.get(p, 0))
     else:
         summary_df['ต่อเนื่องสูงสุด (วัน)'] = 0
 
-    return raw, miss_df, summary_df, streak_df, all_persons, date_min, date_max, total_days
+    if len(full_streak_df):
+        best_full = full_streak_df.groupby('ชื่อผู้ปฏิบัติ')['จำนวนวัน'].max().to_dict()
+        summary_df['ต่อเนื่องครบ3รอบ (วัน)'] = summary_df['ชื่อผู้ปฏิบัติ'].map(lambda p: best_full.get(p, 0))
+    else:
+        summary_df['ต่อเนื่องครบ3รอบ (วัน)'] = 0
+
+    return raw, miss_df, summary_df, streak_df, full_streak_df, all_persons, date_min, date_max, total_days
 
 def color_rate(val):
     if isinstance(val, float):
@@ -230,7 +255,7 @@ if uploaded is None:
 # ── Process ────────────────────────────────────────────────────────────────
 with st.spinner("⏳  กำลังประมวลผล..."):
     try:
-        raw, miss_df, summary_df, streak_df, all_persons, date_min, date_max, total_days = process_file(uploaded.read())
+        raw, miss_df, summary_df, streak_df, full_streak_df, all_persons, date_min, date_max, total_days = process_file(uploaded.read())
     except Exception as e:
         st.error(f"❌  ไม่สามารถอ่านไฟล์ได้: {e}")
         st.stop()
@@ -291,6 +316,44 @@ with tab1:
             st.dataframe(date_miss, use_container_width=True, height=340)
         else:
             st.success("🎉  ไม่มีวันที่ขาดเลย!")
+
+    # ── Top 10 ครบ 3 รอบต่อเนื่องยาวสุด ─────────────────────────────────
+    st.markdown(
+        '<div class="section-hdr blue">🏆  Top 10 — ทำครบ 3 รอบ (เช้า กลางวัน เย็น) ต่อเนื่องยาวสุด</div>',
+        unsafe_allow_html=True)
+
+    if len(full_streak_df):
+        best_full = (full_streak_df
+                     .loc[full_streak_df.groupby('ชื่อผู้ปฏิบัติ')['จำนวนวัน'].idxmax()]
+                     .sort_values('จำนวนวัน', ascending=False)
+                     .head(10)
+                     .copy())
+        best_full['เริ่ม']   = best_full['เริ่ม'].apply(lambda d: d.strftime('%d/%m/%Y'))
+        best_full['สิ้นสุด'] = best_full['สิ้นสุด'].apply(lambda d: d.strftime('%d/%m/%Y'))
+        best_full = best_full.rename(columns={'จำนวนวัน': 'วันต่อเนื่องครบ 3 รอบ'})
+        best_full.insert(0, 'อันดับ', range(1, len(best_full)+1))
+        best_full = best_full[['อันดับ','ชื่อผู้ปฏิบัติ','วันต่อเนื่องครบ 3 รอบ','เริ่ม','สิ้นสุด']]
+
+        def color_full_streak(val):
+            if not isinstance(val, (int, float)): return ''
+            if val >= 30: return 'background-color:#D5F5E3;color:#145A32;font-weight:700'
+            if val >= 14: return 'background-color:#D6EAF8;color:#1A5276;font-weight:700'
+            if val >= 7:  return 'background-color:#FEF9E7;color:#7D6608;font-weight:600'
+            return ''
+
+        styled_top = (best_full.set_index('อันดับ')
+                      .style.map(color_full_streak, subset=['วันต่อเนื่องครบ 3 รอบ']))
+        st.dataframe(styled_top, use_container_width=True,
+                     height=min(380, 40+35*len(best_full)))
+        st.markdown(
+            '<div style="font-size:0.82rem;margin-top:6px">'
+            '<span style="background:#D5F5E3;color:#145A32;padding:3px 10px;border-radius:12px;font-weight:600;margin-right:8px">🥇 ≥ 30 วัน</span>'
+            '<span style="background:#D6EAF8;color:#1A5276;padding:3px 10px;border-radius:12px;font-weight:600;margin-right:8px">🥈 ≥ 14 วัน</span>'
+            '<span style="background:#FEF9E7;color:#7D6608;padding:3px 10px;border-radius:12px;font-weight:600">🥉 ≥ 7 วัน</span>'
+            '</div>',
+            unsafe_allow_html=True)
+    else:
+        st.info("ยังไม่มีข้อมูลการทำครบ 3 รอบต่อเนื่อง")
 
 # ══════════════════════════════════════════════════════════════════════════
 # TAB 2: รายงานการขาด
@@ -379,7 +442,8 @@ with tab3:
         ok      = int(p_sum['วันที่ทำสมาธิ'])
         md      = int(p_sum['วันที่ขาด'])
         pct     = float(p_sum['อัตราขาด'])
-        best_s  = int(p_sum['ต่อเนื่องสูงสุด (วัน)'])
+        best_s  = int(p_sum.get('ต่อเนื่องสูงสุด (วัน)', 0))
+        best_fs = int(p_sum.get('ต่อเนื่องครบ3รอบ (วัน)', 0))
         pct_str = f"{pct:.1%}"
         pct_cls = "red" if pct >= 0.3 else ("orange" if pct > 0 else "navy")
 
