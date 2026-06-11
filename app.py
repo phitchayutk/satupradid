@@ -171,13 +171,28 @@ def process_file(file_bytes: bytes):
         return rows
 
     # วันที่ทำครบ 3 รอบ (เช้า กลางวัน เย็น)
+    # รองรับทั้งแบบส่งครั้งเดียว "เช้า, กลางวัน, เย็น"
+    # และแบบส่งแยก 3 แถว — group by คน+วัน แล้วรวม session
     raw[col_round] = raw[col_round].astype(str).str.strip()
-    full_day_rows = []
+
+    session_rows = []
     for _, row in raw.iterrows():
         r = str(row[col_round])
-        if 'เช้า' in r and 'กลางวัน' in r and 'เย็น' in r:
-            full_day_rows.append({'name': row[col_name], 'date': row[col_date].date()})
-    full_days = pd.DataFrame(full_day_rows).drop_duplicates() if full_day_rows else pd.DataFrame(columns=['name','date'])
+        d = row[col_date].date()
+        n = row[col_name]
+        if 'เช้า'     in r: session_rows.append({'name': n, 'date': d, 'session': 'เช้า'})
+        if 'กลางวัน' in r: session_rows.append({'name': n, 'date': d, 'session': 'กลางวัน'})
+        if 'เย็น'     in r: session_rows.append({'name': n, 'date': d, 'session': 'เย็น'})
+
+    session_flat = pd.DataFrame(session_rows).drop_duplicates() if session_rows else pd.DataFrame(columns=['name','date','session'])
+
+    # วันที่มีครบทั้ง 3 session
+    if len(session_flat):
+        sess_count = (session_flat.groupby(['name','date'])['session']
+                      .nunique().reset_index(name='n_sessions'))
+        full_days = sess_count[sess_count['n_sessions'] == 3][['name','date']].copy()
+    else:
+        full_days = pd.DataFrame(columns=['name','date'])
 
     streak_rows      = []
     full_streak_rows = []
