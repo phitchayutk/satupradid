@@ -246,8 +246,7 @@ st.markdown("""
 <div class="app-header">
     <div style="font-size:2.5rem">🙏</div>
     <div>
-        <h1>ระบบตรวจสอบการปฏิบัติวิถีสาสมาธิ</h1>
-        <h2 style="color:rgba(255,255,255,0.85);font-size:1rem;font-weight:400;margin:4px 0 0 0">โครงการปฏิบัติวิถีสาสมาธิ ๔๙ ล้านนาที</h2>
+        <h1>ระบบตรวจสอบการปฏิบัติวิถีสาสมาธิ <span style="font-size:1.1rem;font-weight:400;opacity:0.85">โครงการปฏิบัติวิถีสาสมาธิ ๔๙ ล้านนาที</span></h1>
         <p>Upload ไฟล์ Google Form → ดูว่าวันไหนไม่ได้ทำสมาธิบ้าง</p>
     </div>
 </div>
