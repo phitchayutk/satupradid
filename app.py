@@ -332,41 +332,66 @@ with tab1:
         else:
             st.success("🎉  ไม่มีวันที่ขาดเลย!")
 
-    # ── Top 10 ครบ 3 รอบต่อเนื่องยาวสุด ─────────────────────────────────
+    # ── สรุปทุกคน ครบ 3 รอบต่อเนื่องยาวสุด ────────────────────────────────
     st.markdown(
-        '<div class="section-hdr blue">🏆  Top 10 — ทำครบ 3 รอบ (เช้า กลางวัน เย็น) ต่อเนื่องยาวสุด</div>',
+        '<div class="section-hdr blue">🏆  สรุปทุกคน — ทำครบ 3 รอบ (เช้า กลางวัน เย็น) ต่อเนื่องยาวสุด (เรียงมากไปน้อย)</div>',
         unsafe_allow_html=True)
 
     if len(full_streak_df):
-        best_full = (full_streak_df
-                     .loc[full_streak_df.groupby('ชื่อผู้ปฏิบัติ')['จำนวนวัน'].idxmax()]
-                     .sort_values('จำนวนวัน', ascending=False)
-                     .head(10)
-                     .copy())
-        best_full['เริ่ม']   = best_full['เริ่ม'].apply(lambda d: d.strftime('%d/%m/%Y'))
-        best_full['สิ้นสุด'] = best_full['สิ้นสุด'].apply(lambda d: d.strftime('%d/%m/%Y'))
-        best_full = best_full.rename(columns={'จำนวนวัน': 'วันต่อเนื่องครบ 3 รอบ'})
-        best_full.insert(0, 'อันดับ', range(1, len(best_full)+1))
-        best_full = best_full[['อันดับ','ชื่อผู้ปฏิบัติ','วันต่อเนื่องครบ 3 รอบ','เริ่ม','สิ้นสุด']]
+        all_full = (full_streak_df
+                    .loc[full_streak_df.groupby('ชื่อผู้ปฏิบัติ')['จำนวนวัน'].idxmax()]
+                    .sort_values('จำนวนวัน', ascending=False)
+                    .copy())
+        all_full['เริ่ม']   = all_full['เริ่ม'].apply(lambda d: d.strftime('%d/%m/%Y'))
+        all_full['สิ้นสุด'] = all_full['สิ้นสุด'].apply(lambda d: d.strftime('%d/%m/%Y'))
+        all_full = all_full.rename(columns={'จำนวนวัน': 'วันต่อเนื่องครบ 3 รอบ'})
+        all_full.insert(0, 'อันดับ', range(1, len(all_full)+1))
+        all_full = all_full[['อันดับ','ชื่อผู้ปฏิบัติ','วันต่อเนื่องครบ 3 รอบ','เริ่ม','สิ้นสุด']]
+
+        # คนที่ไม่เคยครบ 3 รอบเลย เพิ่มเข้ามาด้วยเป็น 0 วัน
+        all_persons_set = set(summary_df['ชื่อผู้ปฏิบัติ'])
+        in_table = set(all_full['ชื่อผู้ปฏิบัติ'])
+        missing_persons = all_persons_set - in_table
+        if missing_persons:
+            zero_rows = pd.DataFrame([{
+                'อันดับ': len(all_full)+i+1,
+                'ชื่อผู้ปฏิบัติ': p,
+                'วันต่อเนื่องครบ 3 รอบ': 0,
+                'เริ่ม': '—', 'สิ้นสุด': '—'
+            } for i, p in enumerate(sorted(missing_persons))])
+            all_full = pd.concat([all_full, zero_rows], ignore_index=True)
 
         def color_full_streak(val):
             if not isinstance(val, (int, float)): return ''
             if val >= 30: return 'background-color:#D5F5E3;color:#145A32;font-weight:700'
             if val >= 14: return 'background-color:#D6EAF8;color:#1A5276;font-weight:700'
             if val >= 7:  return 'background-color:#FEF9E7;color:#7D6608;font-weight:600'
+            if val == 0:  return 'background-color:#FFF0F0;color:#999'
             return ''
 
-        styled_top = (best_full.set_index('อันดับ')
+        styled_all = (all_full.set_index('อันดับ')
                       .style.map(color_full_streak, subset=['วันต่อเนื่องครบ 3 รอบ']))
-        st.dataframe(styled_top, use_container_width=True,
-                     height=min(380, 40+35*len(best_full)))
+        st.dataframe(styled_all, use_container_width=True,
+                     height=min(600, 40+35*len(all_full)))
+
         st.markdown(
             '<div style="font-size:0.82rem;margin-top:6px">'
             '<span style="background:#D5F5E3;color:#145A32;padding:3px 10px;border-radius:12px;font-weight:600;margin-right:8px">🥇 ≥ 30 วัน</span>'
             '<span style="background:#D6EAF8;color:#1A5276;padding:3px 10px;border-radius:12px;font-weight:600;margin-right:8px">🥈 ≥ 14 วัน</span>'
-            '<span style="background:#FEF9E7;color:#7D6608;padding:3px 10px;border-radius:12px;font-weight:600">🥉 ≥ 7 วัน</span>'
+            '<span style="background:#FEF9E7;color:#7D6608;padding:3px 10px;border-radius:12px;font-weight:600;margin-right:8px">🥉 ≥ 7 วัน</span>'
+            '<span style="background:#FFF0F0;color:#999;padding:3px 10px;border-radius:12px;font-weight:600">— ยังไม่ครบ 3 รอบ</span>'
             '</div>',
             unsafe_allow_html=True)
+
+        # Export Excel
+        buf_fs = io.BytesIO()
+        export_fs = all_full.copy()
+        export_fs.to_excel(buf_fs, index=False, sheet_name='ต่อเนื่องครบ3รอบ')
+        st.download_button(
+            '⬇️  ดาวน์โหลด Excel — สรุปวันต่อเนื่องครบ 3 รอบ',
+            data=buf_fs.getvalue(),
+            file_name='สรุปต่อเนื่องครบ3รอบ.xlsx',
+            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     else:
         st.info("ยังไม่มีข้อมูลการทำครบ 3 รอบต่อเนื่อง")
 
