@@ -383,6 +383,8 @@ with tab1:
             '</div>',
             unsafe_allow_html=True)
 
+        st.markdown('<div style="margin-top:16px"></div>', unsafe_allow_html=True)
+
         # Export Excel
         buf_fs = io.BytesIO()
         export_fs = all_full.copy()
